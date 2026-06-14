@@ -1,24 +1,42 @@
 import requests
 import time
 import queue
-from .utils.sanitizer import prepare_body , prepare_headers
+
+from .utils.sanitizer import prepare_body, prepare_headers
 from .utils.queue import event_queue
 from .config import Config
+from .filters.url_filter import should_capture
+from .sdk_state import sdk_status
+from .utils.logger import log 
 
 original_request = requests.Session.request
 
-sdk_status = {
-    "healthy": True
-}
 
 def wrapper(
-        self,
-        method,
-        url,
-        **kwargs
+    self,
+    method,
+    url,
+    **kwargs
 ):
- 
+
+    if not sdk_status["enabled"]:
+        return original_request(
+            self,
+            method,
+            url,
+            **kwargs
+        )
+
     if "/capture" in url:
+        return original_request(
+            self,
+            method,
+            url,
+            **kwargs
+        )
+
+    if not should_capture(url):
+        log(f"[SKIPPED] {method}{url}")
         return original_request(
             self,
             method,
@@ -28,63 +46,128 @@ def wrapper(
 
     start = time.perf_counter()
 
-    response = original_request(
-        self,
-        method,
-        url,
-        **kwargs
-    )
-
-    elapsed_ms = int(time.perf_counter() - start)*1000
-
     try:
-        response_body = response.json()
-    except Exception:
-        response_body = response.text
 
-    request_headers = prepare_headers(
-    response.request.headers
-    )
-    
-    response_headers = prepare_headers(
-        response.headers
-    )
-    
-    request_body = prepare_body(
-        response.request.body
-    )
-    
-    response_body = prepare_body(
-        response_body
-    )
+        response = original_request(
+            self,
+            method,
+            url,
+            **kwargs
+        )
 
+        elapsed_ms = int(
+            (time.perf_counter() - start) * 1000
+        )
 
-    payload = {
-    "api_key": Config.api_key,
+        try:
+            response_body = response.json()
+        except Exception:
+            response_body = response.text
 
-    "method": method.upper(),
-    "useragent": request_headers.get("User-Agent"),
+        try:
+            request_headers = prepare_headers(
+                response.request.headers
+            )
+        except Exception:
+            request_headers = {}
 
-    "endpoint": url,
-    "status_code": response.status_code,
-    "response_time_ms": elapsed_ms,
+        try:
+            response_headers = prepare_headers(
+                response.headers
+            )
+        except Exception:
+            response_headers = {}
 
-    "request_headers": request_headers,
-    "response_headers": response_headers,
+        try:
+            request_body = prepare_body(
+                response.request.body
+            )
+        except Exception:
+            request_body = None
 
-    "request_body": request_body,
-    "response_body": response_body
-    }
-    
-    print(payload)
-    try:
-      event_queue.put_nowait(payload)
-    except queue.Full:
-        pass
+        try:
+            response_body = prepare_body(
+                response_body
+            )
+        except Exception:
+            response_body = None
 
-    return response
+        payload = {
+            "api_key": Config.api_key,
 
+            "method": method.upper(),
+            "useragent": request_headers.get(
+                "User-Agent"
+            ),
 
+            "endpoint": url,
+            "status_code": response.status_code,
+            "response_time_ms": elapsed_ms,
+
+            "request_headers": request_headers,
+            "response_headers": response_headers,
+
+            "request_body": request_body,
+            "response_body": response_body,
+        }
+
+        try:
+            log(f"[CAPTURED]{method} {url}")
+            event_queue.put_nowait(payload)
+
+        except queue.Full:
+
+            log(
+                "Queue full. Dropping event."
+            )
+
+        return response
+
+    except Exception as e:
+
+        elapsed_ms = int(
+            (time.perf_counter() - start) * 1000
+        )
+
+        try:
+
+            payload = {
+                "api_key": Config.api_key,
+
+                "method": method.upper(),
+                "endpoint": url,
+
+                "status_code": 0,
+                "response_time_ms": elapsed_ms,
+
+                "error": type(e).__name__,
+                "error_message": str(e),
+
+                "request_headers": {},
+                "response_headers": {},
+
+                "request_body": None,
+                "response_body": None,
+            }
+
+            try:
+
+                log(f"[CAPTURED]{method} {url}")
+                event_queue.put_nowait(payload)
+
+            except queue.Full:
+
+                log(
+                    "Queue full. Dropping failed request event."
+                )
+
+        except Exception as capture_error:
+
+            log(
+                f"Failed to capture request: {capture_error}"
+            )
+
+        raise
 
 def instrument_requests():
     requests.Session.request = wrapper

@@ -2,28 +2,73 @@ from .config import Config
 from .instrumentation import instrument_requests 
 from .sender import start_worker
 from .utils.queue import event_queue
+from .filters.validators import (validate_api_key , validate_url_rules)
+from .sdk_state import sdk_status
+
 
 class RequestVault:
 
     @staticmethod
     def init(
         api_key,
-        server_url="http://localhost:8000"
+        server_url="http://localhost:8000",
+        include_urls=None,
+        exclude_urls=None,
+        debug=False
     ):
-        
-        Config.api_key = api_key
-        Config.server_url = server_url
 
-        start_worker()
+        try:
 
-        instrument_requests()
-    
-    @staticmethod
-    def status() :
+            sdk_status["healthy"] = True
+            sdk_status["enabled"] = True
+            sdk_status["errors"] = []
 
-        return {
-            "healthy":Config.healthy,
-            "last_error":Config.last_error,
-            "queue_size":event_queue.qsize(),
-            "api_key_set": Config.api_key is not None
-        }
+            Config.debug = debug
+            Config.server_url = server_url
+
+            Config.api_key = validate_api_key(
+                api_key
+            )
+
+            Config.include_urls = validate_url_rules(
+                include_urls,
+                "include_urls"
+            )
+
+            Config.exclude_urls = validate_url_rules(
+                exclude_urls,
+                "exclude_urls"
+            )
+
+            if not sdk_status["enabled"]:
+                return
+
+            if not getattr(
+                Config,
+                "worker_started",
+                False
+            ):
+                start_worker()
+                Config.worker_started = True
+
+            if not getattr(
+                Config,
+                "instrumented",
+                False
+            ):
+                instrument_requests()
+                Config.instrumented = True
+
+        except Exception as e:
+
+            sdk_status["healthy"] = False
+            sdk_status["enabled"] = False
+
+            sdk_status["errors"].append(
+                f"Initialization failed: {e}"
+            )
+
+            if debug:
+                print(
+                    f"[RequestVault] Initialization failed: {e}"
+                )
