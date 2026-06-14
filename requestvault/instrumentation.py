@@ -6,8 +6,10 @@ from .utils.sanitizer import prepare_body, prepare_headers
 from .utils.queue import event_queue
 from .config import Config
 from .filters.url_filter import should_capture
+from .filters.sampling import should_sample
 from .sdk_state import sdk_status
 from .utils.logger import log 
+from .utils.size_limit import limit_size
 
 original_request = requests.Session.request
 
@@ -43,6 +45,19 @@ def wrapper(
             url,
             **kwargs
         )
+    
+    if not should_sample():
+
+        log(
+            f"[SAMPLED OUT] {method.upper()} {url}"
+        )
+    
+        return original_request(
+            self,
+            method,
+            url,
+            **kwargs
+        )
 
     start = time.perf_counter()
 
@@ -58,38 +73,54 @@ def wrapper(
         elapsed_ms = int(
             (time.perf_counter() - start) * 1000
         )
+    
 
         try:
             response_body = response.json()
         except Exception:
             response_body = response.text
 
-        try:
-            request_headers = prepare_headers(
-                response.request.headers
-            )
-        except Exception:
-            request_headers = {}
 
-        try:
-            response_headers = prepare_headers(
-                response.headers
-            )
-        except Exception:
-            response_headers = {}
+        if Config.capture_headers:
+    
+            try:
+                request_headers = prepare_headers(
+                    response.request.headers
+                )
+            except Exception:
+                request_headers = {}
+    
+            try:
+                response_headers = prepare_headers(
+                    response.headers
+                )
+            except Exception:
+                response_headers = {}
+        else:
+            request_headers = None
+            response_headers = None
+        
+        if Config.capture_request_body:
+            try:
+                request_body = prepare_body(
+                    response.request.body
+                )
+                request_body = limit_size(request_body)
 
-        try:
-            request_body = prepare_body(
-                response.request.body
-            )
-        except Exception:
+            except Exception:
+                request_body = None
+        else:
             request_body = None
-
-        try:
-            response_body = prepare_body(
-                response_body
-            )
-        except Exception:
+    
+        if Config.capture_response_body:
+            try:
+                response_body = prepare_body(
+                    response_body
+                )
+                response_body = limit_size(response_body)
+            except Exception:
+                response_body = None
+        else:
             response_body = None
 
         payload = {

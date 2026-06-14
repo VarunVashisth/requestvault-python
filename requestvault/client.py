@@ -2,7 +2,7 @@ from .config import Config
 from .instrumentation import instrument_requests 
 from .sender import start_worker
 from .utils.queue import event_queue
-from .filters.validators import (validate_api_key , validate_url_rules)
+from .filters.validators import (validate_api_key , validate_url_rules , validate_sample_rate)
 from .sdk_state import sdk_status
 
 
@@ -14,6 +14,10 @@ class RequestVault:
         server_url="http://localhost:8000",
         include_urls=None,
         exclude_urls=None,
+        sample_rate=1.0,
+        capture_headers=True,
+        capture_request_body=True,
+        capture_response_body=True,
         debug=False
     ):
 
@@ -39,6 +43,10 @@ class RequestVault:
                 exclude_urls,
                 "exclude_urls"
             )
+            Config.sample_rate = validate_sample_rate(sample_rate)
+            Config.capture_headers = bool(capture_headers)
+            Config.capture_request_body = bool(capture_request_body)
+            Config.capture_response_body = bool(capture_response_body)
 
             if not sdk_status["enabled"]:
                 return

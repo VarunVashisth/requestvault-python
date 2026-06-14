@@ -11,6 +11,14 @@ class Config:
 
     instrumented = False
     worker_started = False
+    sample_rate = 1.0
+
+    capture_headers = True
+    
+    capture_request_body = True
+    capture_response_body = True
+
+    max_body_size = 25000
 
     
     

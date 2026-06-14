@@ -2,7 +2,7 @@ import json
 from datetime import datetime, date
 from decimal import Decimal
 
-MAX_BODY_SIZE = 10000
+
 
 SENSITIVE_HEADERS = {
     "authorization",
@@ -167,39 +167,13 @@ def sanitize_headers(headers):
     return cleaned
 
 
-def limit_size(data):
-
-    if data is None:
-        return None
-
-    try:
-        text = json.dumps(
-            data,
-            default=str,
-            ensure_ascii=False
-        )
-
-    except Exception:
-        text = str(data)
-
-    if len(text) <= MAX_BODY_SIZE:
-        return data
-
-    return {
-        "truncated": True,
-        "original_size": len(text),
-        "preview_size": MAX_BODY_SIZE,
-        "preview": text[:MAX_BODY_SIZE]
-    }
 
 
 def prepare_body(data):
-    return limit_size(
-        sanitize_body(data)
-    )
+    return  sanitize_body(data)
+    
 
 
 def prepare_headers(headers):
-    return limit_size(
-        sanitize_headers(headers)
-    )
+    return  sanitize_headers(headers)
+    

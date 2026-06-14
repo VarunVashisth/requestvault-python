@@ -58,3 +58,44 @@ def validate_url_rules(rules, name):
         valid_rules.append(rule)
 
     return valid_rules
+
+def validate_sample_rate(rate):
+
+    try:
+
+        rate = float(rate)
+
+    except Exception:
+
+        log(
+            "Invalid sample_rate. Using 1.0"
+        )
+
+        return 1.0
+
+    if rate < 0:
+        return 0.0
+
+    if rate > 1:
+        return 1.0
+
+    return rate
+
+
+def validate_max_body_size(size):
+
+    try:
+        size = int(size)
+
+    except Exception:
+
+        log(
+            "Invalid max_body_size. Using 10000."
+        )
+
+        return 10000
+
+    if size < 100:
+        return 100
+
+    return size
