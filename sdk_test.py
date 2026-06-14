@@ -2,12 +2,17 @@ from requestvault import RequestVault
 import requests , time
 
 RequestVault.init(
-    api_key="rv_fWhHBn63eLTdAZBGm1-YjUAMpZwVO7tXhBcnOlvHOXM",
+    api_key="",
     )
 
-requests.get(
-    "https://httpbin.org/get"
+requests.post(
+    "https://httpbin.org/post",
+    json={
+        "name": "Varun",
+        "password": "123"
+    }
 )
 time.sleep(5)
 
 print(RequestVault.status())
+wrtwRW
