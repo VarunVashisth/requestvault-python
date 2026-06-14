@@ -36,7 +36,20 @@ def sanitize_body(data):
         return None
 
     if isinstance(data, (bytes, bytearray)):
-        return "[BINARY_DATA]"
+
+        try:
+            decoded = data.decode("utf-8")
+
+            try:
+                return sanitize_body(
+                    json.loads(decoded)
+                )
+
+            except Exception:
+                return decoded
+
+        except Exception:
+            return "[BINARY_DATA]"
 
     if isinstance(data, (datetime, date)):
         return data.isoformat()
@@ -73,11 +86,30 @@ def sanitize_body(data):
     if isinstance(data, set):
         return [sanitize_body(item) for item in data]
 
-    if isinstance(data, (bool, int, float, str)):
+    if isinstance(data, str):
+
+        stripped = data.strip()
+
+        if (
+            stripped.startswith("{")
+            or stripped.startswith("[")
+        ):
+            try:
+                parsed = json.loads(data)
+
+                return sanitize_body(parsed)
+
+            except Exception:
+                pass
+
+        return data
+
+    if isinstance(data, (bool, int, float)):
         return data
 
     try:
-        return repr(data)
+        return str(data)
+
     except Exception:
         return "[UNSERIALIZABLE_OBJECT]"
 
@@ -114,7 +146,17 @@ def sanitize_headers(headers):
             value,
             (bytes, bytearray)
         ):
-            cleaned[key_str] = "[BINARY_DATA]"
+            try:
+                decoded = value.decode("utf-8")
+
+                try:
+                    cleaned[key_str] = json.loads(decoded)
+    
+                except Exception:
+                    cleaned[key_str] = decoded
+
+            except Exception:
+                cleaned[key_str] = "[BINARY_DATA]"
 
         else:
             try:

@@ -1,5 +1,5 @@
 import threading
-from .utils.queue import event_queue
+from .utils.queue import event_queue 
 import requests
 from .config import Config
 def start_worker():
