@@ -11,7 +11,7 @@ class RequestVault:
     @staticmethod
     def init(
         api_key,
-        server_url="http://localhost:8000",
+        server_url = "https://requestvault.onrender.com",
         include_urls=None,
         exclude_urls=None,
         sample_rate=1.0,

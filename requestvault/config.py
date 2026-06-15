@@ -1,6 +1,6 @@
 class Config:
     api_key = None
-    server_url = "http://localhost:8000"
+    server_url = "https://requestvault.onrender.com"
     healthy = True
     last_error = None
 
