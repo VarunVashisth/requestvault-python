@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "requestvault"
-version = "0.1.0b1"
+version = "0.1.0b2"
 description = "API observability and monitoring SDK for Python applications"
 readme = "README.md"
 requires-python = ">=3.10"
