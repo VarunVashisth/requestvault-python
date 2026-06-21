@@ -1,5 +1,4 @@
-
-import requests
+import httpx
 import time
 import queue
 
@@ -11,53 +10,58 @@ from .filters.sampling import should_sample
 from .sdk_state import sdk_status
 from .utils.logger import log
 from .utils.size_limit import limit_size
-from .instrumentation_ai import tag_ai_request  
+from .instrumentation_ai import tag_ai_request
 
-original_request = requests.Session.request
+original_send = httpx.Client.send
 
 
 def wrapper(
     self,
-    method,
-    url,
+    request,
+    *args,
     **kwargs
 ):
-    print("wrapper hit" , method , url)
+
+    url = str(request.url)
+    method = request.method
+
+    print("HTTPX HIT", method, url)
+
     if not sdk_status["enabled"]:
-        return original_request(
+        return original_send(
             self,
-            method,
-            url,
+            request,
+            *args,
             **kwargs
         )
 
     if "/capture" in url:
-        return original_request(
+        return original_send(
             self,
-            method,
-            url,
+            request,
+            *args,
             **kwargs
         )
 
     if not should_capture(url):
-        log(f"[SKIPPED] {method}{url}")
-        return original_request(
+        log(f"[SKIPPED] {method} {url}")
+        return original_send(
             self,
-            method,
-            url,
+            request,
+            *args,
             **kwargs
         )
 
     if not should_sample():
 
         log(
-            f"[SAMPLED OUT] {method.upper()} {url}"
+            f"[SAMPLED OUT] {method} {url}"
         )
 
-        return original_request(
+        return original_send(
             self,
-            method,
-            url,
+            request,
+            *args,
             **kwargs
         )
 
@@ -65,10 +69,10 @@ def wrapper(
 
     try:
 
-        response = original_request(
+        response = original_send(
             self,
-            method,
-            url,
+            request,
+            *args,
             **kwargs
         )
 
@@ -76,64 +80,76 @@ def wrapper(
             (time.perf_counter() - start) * 1000
         )
 
-
         try:
             response_body = response.json()
         except Exception:
             response_body = response.text
 
-
         if Config.capture_headers:
 
             try:
                 request_headers = prepare_headers(
-                    response.request.headers
+                    dict(request.headers)
                 )
             except Exception:
                 request_headers = {}
 
             try:
                 response_headers = prepare_headers(
-                    response.headers
+                    dict(response.headers)
                 )
             except Exception:
                 response_headers = {}
+
         else:
             request_headers = None
             response_headers = None
 
         if Config.capture_request_body:
+
             try:
                 request_body = prepare_body(
-                    response.request.body
+                    request.content
                 )
-                request_body = limit_size(request_body)
+
+                request_body = limit_size(
+                    request_body
+                )
 
             except Exception:
                 request_body = None
+
         else:
             request_body = None
 
         if Config.capture_response_body:
+
             try:
                 response_body = prepare_body(
                     response_body
                 )
-                response_body = limit_size(response_body)
+
+                response_body = limit_size(
+                    response_body
+                )
+
             except Exception:
                 response_body = None
+
         else:
             response_body = None
 
         payload = {
             "api_key": Config.api_key,
 
-            "method": method.upper(),
+            "method": method,
+
             "useragent": request_headers.get(
                 "User-Agent"
             ) if request_headers else None,
 
             "endpoint": url,
+
             "status_code": response.status_code,
             "response_time_ms": elapsed_ms,
 
@@ -144,13 +160,21 @@ def wrapper(
             "response_body": response_body,
         }
 
- 
-        payload = tag_ai_request(payload, response_body)
+        payload = tag_ai_request(
+            payload,
+            response_body
+        )
 
         try:
-            log(f"[CAPTURED]{method} {url}")
-            event_queue.put_nowait(payload)
-            print("Event added to queue")
+
+            log(
+                f"[CAPTURED]{method} {url}"
+            )
+
+            event_queue.put_nowait(
+                payload
+            )
+
         except queue.Full:
 
             log(
@@ -160,7 +184,7 @@ def wrapper(
         return response
 
     except Exception as e:
-        print("exception block hit :", type(e).__name__)
+
         elapsed_ms = int(
             (time.perf_counter() - start) * 1000
         )
@@ -170,7 +194,7 @@ def wrapper(
             payload = {
                 "api_key": Config.api_key,
 
-                "method": method.upper(),
+                "method": method,
                 "endpoint": url,
 
                 "status_code": 0,
@@ -186,16 +210,9 @@ def wrapper(
                 "response_body": None,
             }
 
-            try:
-
-                log(f"[CAPTURED]{method} {url}")
-                event_queue.put_nowait(payload)
-
-            except queue.Full:
-
-                log(
-                    "Queue full. Dropping failed request event."
-                )
+            event_queue.put_nowait(
+                payload
+            )
 
         except Exception as capture_error:
 
@@ -206,5 +223,5 @@ def wrapper(
         raise
 
 
-def instrument_requests():
-    requests.Session.request = wrapper
+def instrument_httpx():
+    httpx.Client.send = wrapper

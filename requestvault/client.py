@@ -1,4 +1,5 @@
 from .config import Config
+from .instrumentation_httpx import instrument_httpx
 from .instrumentation import instrument_requests 
 from .sender import start_worker
 from .utils.queue import event_queue
@@ -11,7 +12,7 @@ class RequestVault:
     @staticmethod
     def init(
         api_key,
-        server_url = "https://requestvault.onrender.com",
+        server_url = "http://localhost:8000",
         include_urls=None,
         exclude_urls=None,
         sample_rate=1.0,
@@ -64,6 +65,7 @@ class RequestVault:
                 "instrumented",
                 False
             ):
+                instrument_httpx()
                 instrument_requests()
                 Config.instrumented = True
 
